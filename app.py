@@ -1,5 +1,5 @@
 """
-Family NFL Dashboard
+KB's Couch Coach
 --------------------
 Streamlit app: live scores + box scores, power rankings, team pages, schedule.
 
@@ -46,7 +46,7 @@ REFRESH_SECONDS = 30
 ABBR_FIX = {"LA": "LAR", "WAS": "WSH", "ARI": "ARI", "JAC": "JAX"}
 
 st.set_page_config(
-    page_title="Family NFL Dashboard",
+    page_title="KB's Couch Coach",
     page_icon="🏈",
     layout="centered",
     initial_sidebar_state="collapsed",
@@ -62,8 +62,8 @@ def ensure_pwa_files():
     static.mkdir(exist_ok=True)
 
     manifest = {
-        "name": "Family NFL Dashboard",
-        "short_name": "NFL Dash",
+        "name": "KB's Couch Coach",
+        "short_name": "Couch Coach",
         "description": "Live NFL scores, power rankings and team stats",
         "start_url": "/",
         "scope": "/",
@@ -131,7 +131,7 @@ def inject_pwa_tags():
     add('meta', {{name: 'theme-color', content: '{NAVY}'}});
     add('meta', {{name: 'apple-mobile-web-app-capable', content: 'yes'}});
     add('meta', {{name: 'mobile-web-app-capable', content: 'yes'}});
-    add('meta', {{name: 'apple-mobile-web-app-title', content: 'NFL Dash'}});
+    add('meta', {{name: 'apple-mobile-web-app-title', content: 'Couch Coach'}});
   }}
   if ('serviceWorker' in navigator) {{
     navigator.serviceWorker.register('/app/static/service-worker.js', {{scope: '/app/static/'}})
@@ -746,7 +746,7 @@ def rankings_section(rank):
 ensure_pwa_files()
 inject_pwa_tags()
 
-st.markdown('<div class="app-title">🏈 Family NFL Dashboard</div>', unsafe_allow_html=True)
+st.markdown('<div class="app-title">🏈 KB&#39;s Couch Coach</div>', unsafe_allow_html=True)
 
 live_dashboard()
 

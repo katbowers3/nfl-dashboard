@@ -210,6 +210,16 @@ h1, h2, h3 {{ color: #FFFFFF; }}
 .sch .mu span {{ opacity: .6; font-weight: 400; font-size: .8rem; }}
 .sch .wx {{ font-size: .7rem; opacity: .8; }}
 .sch .pick {{ font-size: .78rem; font-weight: 700; margin-top: 4px; color: #ffd166; }}
+.up-grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 8px; margin: 6px 0 10px 0; }}
+.up {{ background: #10264d; border-radius: 12px; padding: 8px 10px; color: white; border-top: 3px solid #1f5fbf; }}
+.up .uw {{ font-size: .72rem; opacity: .8; }}
+.up .um {{ display: flex; align-items: center; gap: 4px; font-weight: 800; margin: 4px 0; font-size: .95rem; flex-wrap: wrap; }}
+.up .um img {{ height: 20px; width: 20px; object-fit: contain; }}
+.up .um i {{ font-style: normal; font-weight: 600; font-size: .68rem; opacity: .7; }}
+.up .um span {{ opacity: .6; font-weight: 400; font-size: .8rem; }}
+.up .pk {{ font-size: .78rem; font-weight: 700; color: #ffd166; }}
+.up .tv {{ font-size: .72rem; opacity: .9; margin-top: 2px; }}
+.up .wx {{ font-size: .68rem; opacity: .7; margin-top: 2px; }}
 </style>
 """,
     unsafe_allow_html=True,
@@ -249,6 +259,18 @@ def season_year():
     return now.year if now.month >= 3 else now.year - 1
 
 
+def _tv(comp):
+    """TV / streaming channels for a game, e.g. 'FOX, Peacock'."""
+    names = []
+    for b in comp.get("broadcasts") or []:
+        for n in b.get("names") or []:
+            if n not in names:
+                names.append(n)
+    if not names and comp.get("broadcast"):
+        names = [comp["broadcast"]]
+    return ", ".join(names)
+
+
 def parse_events(data):
     rows = []
     for ev in (data or {}).get("events", []):
@@ -283,6 +305,7 @@ def parse_events(data):
                     venue_city=((comp.get("venue") or {}).get("address") or {}).get("city", ""),
                     indoor=bool((comp.get("venue") or {}).get("indoor", False)),
                     wx_text=(ev.get("weather") or {}).get("displayValue", "") or "",
+                    tv=_tv(comp),
                 )
             )
         except Exception:
@@ -636,6 +659,44 @@ def game_card(g):
     )
 
 
+def upcoming_section(part, rank):
+    """Compact 'Coming up' blocks: kickoff, matchup with Power Rank, projected winner, TV."""
+    pos = {a: i + 1 for i, a in enumerate(rank.abbr)} if not rank.empty else {}
+
+    def rank_tag(abbr):
+        return f"<i>#{pos[abbr]}</i>" if abbr in pos else ""
+
+    def grid(frame):
+        html = '<div class="up-grid">'
+        for _, g in frame.iterrows():
+            who, p = projection(rank, g.away, g.home)
+            wx = short_wx(g, 2)
+            tv = g.tv or "TV info coming soon"
+            html += (
+                f'<div class="up"><div class="uw">{g.date.strftime("%a %I:%M %p").replace(" 0", " ")}</div>'
+                f'<div class="um"><img src="{g.away_logo}"/><b>{g.away}</b>{rank_tag(g.away)}'
+                f'<span>@</span><b>{g.home}</b>{rank_tag(g.home)}<img src="{g.home_logo}"/></div>'
+                f'<div class="pk">🔮 {who} wins · {p * 100:.0f}%</div>'
+                f'<div class="tv">📺 {tv}</div>'
+                + (f'<div class="wx">{wx}</div>' if wx else "")
+                + "</div>"
+            )
+        return html + "</div>"
+
+    st.caption(
+        "🔮 projected winner and chance (a fun estimate) · #n = Power Rank, 1 is the strongest "
+        "team · 📺 where to watch · away @ home"
+    )
+    day_of = part.date.dt.strftime("%a %b %d")
+    days = list(dict.fromkeys(day_of))
+    if len(days) == 1:
+        st.markdown(grid(part), unsafe_allow_html=True)
+    else:
+        for tab, day in zip(st.tabs(days), days):
+            with tab:
+                st.markdown(grid(part[day_of == day]), unsafe_allow_html=True)
+
+
 def render_boxscore(event_id):
     data = fetch_short(f"{ESPN}/summary", (("event", event_id),))
     if not data:
@@ -710,6 +771,7 @@ def render_boxscore(event_id):
 @st.fragment(run_every=REFRESH_SECONDS)
 def live_dashboard():
     """Everything in here refreshes automatically every 30 seconds."""
+    rank = pd.DataFrame()
     games = load_season_games()
     if games.empty:
         st.warning(
@@ -748,6 +810,9 @@ def live_dashboard():
                 f'<div class="sec-title">{title}</div><div class="sec-sub">{sub}</div>',
                 unsafe_allow_html=True,
             )
+            if state == "pre":
+                upcoming_section(part, rank)
+                continue
             for _, g in part.iterrows():
                 game_card(g)
                 if state in ("in", "post"):
@@ -857,7 +922,7 @@ def team_section(games, directory, rank):
             st.dataframe(t_inj, hide_index=True, use_container_width=True)
 
 
-def schedule_section(games, rank):
+def schedule_by_week(games, rank):
     up = games[games.state == "pre"].sort_values("date")
     if up.empty:
         st.info("No upcoming games found.")
@@ -884,6 +949,53 @@ def schedule_section(games, rank):
             )
         html += "</div>"
         st.markdown(html, unsafe_allow_html=True)
+
+
+def season_table(games, rank):
+    """Every regular-season game through the last week, in one scrollable table."""
+    reg = games[games.season_type == 2].sort_values("date")
+    if reg.empty:
+        st.info("No regular-season games found.")
+        return
+    teams = sorted(set(reg.home_name) | set(reg.away_name))
+    pick = st.selectbox("Show games for", ["All teams"] + teams)
+    if pick != "All teams":
+        reg = reg[(reg.home_name == pick) | (reg.away_name == pick)]
+    rows = []
+    for _, g in reg.iterrows():
+        if g.state == "post":
+            note = f"Final: {g.away} {g.away_score}, {g.home} {g.home_score}"
+        elif g.state == "in":
+            note = f"Live now: {g.away} {g.away_score}, {g.home} {g.home_score}"
+        else:
+            who, p = projection(rank, g.away, g.home)
+            note = f"🔮 {who} {p * 100:.0f}%"
+        rows.append(
+            {
+                "Week": int(g.week) if pd.notna(g.week) else None,
+                "When": g.date.strftime("%a %b %d · %I:%M %p").replace(" 0", " "),
+                "Away": g.away,
+                "Home": g.home,
+                "Projected winner / Result": note,
+                "TV": g.tv or "TBA",
+            }
+        )
+    last = int(reg.week.max()) if reg.week.notna().any() else "?"
+    st.caption(
+        f"{len(rows)} regular-season games through Week {last} (playoffs not included). "
+        "Times are Central. 🔮 = projected winner (a fun estimate). Scroll inside the table."
+    )
+    st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True, height=460)
+
+
+def schedule_section(games, rank):
+    view = st.radio(
+        "View", ["By week", "Whole season"], horizontal=True, label_visibility="collapsed"
+    )
+    if view == "Whole season":
+        season_table(games, rank)
+    else:
+        schedule_by_week(games, rank)
 
 
 def rankings_section(rank):

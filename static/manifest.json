@@ -1,6 +1,6 @@
 {
-  "name": "Family NFL Dashboard",
-  "short_name": "NFL Dash",
+  "name": "KB's Couch Coach",
+  "short_name": "Couch Coach",
   "description": "Live NFL scores, power rankings and team stats",
   "start_url": "/",
   "scope": "/",

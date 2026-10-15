@@ -19,6 +19,7 @@ public APIs and their terms of use restrict scraping/redistribution (PFF is payw
 """
 
 import json
+import math
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -183,6 +184,32 @@ h1, h2, h3 {{ color: #FFFFFF; }}
 }}
 .card .v {{ font-size: 1.35rem; font-weight: 800; }}
 .card .l {{ font-size: .7rem; opacity: .8; text-transform: uppercase; letter-spacing: .4px; }}
+.sec-title {{ font-size: 1.1rem; font-weight: 800; margin: 16px 0 2px 0; color: #FFFFFF; }}
+.sec-sub {{ font-size: .8rem; opacity: .7; margin-bottom: 6px; }}
+.sb {{ display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px; background: #10264d; border-radius: 14px; padding: 10px 12px; margin: 8px 0; color: white; border-top: 4px solid var(--c, {RED}); }}
+.sb .tm {{ display: flex; align-items: center; gap: 8px; min-width: 0; }}
+.sb .tm img {{ height: 34px; width: 34px; object-fit: contain; flex: none; }}
+.sb .ab {{ font-weight: 800; font-size: 1.05rem; line-height: 1.05; }}
+.sb .ha {{ font-size: .58rem; opacity: .65; letter-spacing: .8px; }}
+.sb .sc {{ font-size: 1.6rem; font-weight: 800; margin-left: auto; }}
+.sb .tm.h .sc {{ margin-left: 0; margin-right: auto; }}
+.sb .sc.dim {{ opacity: .45; }}
+.sb .mid {{ text-align: center; min-width: 78px; }}
+.sb .mt {{ font-size: .78rem; margin-top: 3px; opacity: .9; }}
+.sb .foot {{ grid-column: 1 / -1; font-size: .74rem; opacity: .75; text-align: center; margin-top: 2px; }}
+.chip {{ display: inline-block; font-size: .68rem; font-weight: 800; letter-spacing: .8px; padding: 2px 8px; border-radius: 999px; color: white; }}
+.chip.live {{ background: {RED}; animation: pulse 1.4s ease-in-out infinite; }}
+.chip.final {{ background: #4a5568; }}
+.chip.soon {{ background: #1f5fbf; }}
+@keyframes pulse {{ 0%,100% {{ opacity: 1; }} 50% {{ opacity: .55; }} }}
+.sch-grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 6px; }}
+.sch {{ background: #10264d; border-radius: 12px; padding: 8px 10px; color: white; border-left: 4px solid {RED}; }}
+.sch .when {{ font-size: .75rem; opacity: .8; }}
+.sch .mu {{ display: flex; align-items: center; gap: 5px; font-weight: 800; margin: 3px 0; font-size: 1rem; }}
+.sch .mu img {{ height: 22px; width: 22px; object-fit: contain; }}
+.sch .mu span {{ opacity: .6; font-weight: 400; font-size: .8rem; }}
+.sch .wx {{ font-size: .7rem; opacity: .8; }}
+.sch .pick {{ font-size: .78rem; font-weight: 700; margin-top: 4px; color: #ffd166; }}
 </style>
 """,
     unsafe_allow_html=True,
@@ -478,62 +505,132 @@ def champion_banner(rank):
         return
     top = rank.iloc[0]
     st.markdown(
+        '<div class="sec-title">🏆 Who&#39;s the best team right now?</div>'
+        '<div class="sec-sub">Ranked by Power Score, our overall strength rating. '
+        "It updates as games finish.</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
         f"""
 <div class="champ" style="background: linear-gradient(135deg, {top.color}, #0A1F44);">
   <div class="crown">👑</div><br/>
   <img src="{top.logo}" alt="logo"/>
   <div class="tname">{top["name"]}</div>
-  <div class="sub">Best team right now · Power score <b>{top.Power}</b> / 100</div>
-  <div class="sub">{int(top.W)}-{int(top.L)}{'-' + str(int(top['T'])) if top['T'] else ''} ·
-  {top.PF:.1f} PF · {top.PA:.1f} PA · {top.Diff:+.1f} margin per game</div>
+  <div class="sub">Power Score <b>{top.Power}</b> out of 100</div>
+  <div class="sub">Record {int(top.W)}-{int(top.L)}{'-' + str(int(top['T'])) if top['T'] else ''} ·
+  scores {top.PF:.1f} and allows {top.PA:.1f} points per game</div>
 </div>
 """,
         unsafe_allow_html=True,
     )
+
+    st.markdown(
+        '<div class="sec-title">📊 Top 10 teams</div>'
+        '<div class="sec-sub">Longer bar = stronger team. '
+        "The dashed line at 50 marks an average team.</div>",
+        unsafe_allow_html=True,
+    )
     top10 = rank.head(10).iloc[::-1]
+    labels = [f"{i + 1}. {n.split()[-1]}" for i, n in zip(top10.index, top10["name"])]
     fig = go.Figure(
         go.Bar(
             x=top10.Power,
-            y=top10.abbr,
+            y=labels,
             orientation="h",
-            marker_color=top10.color,
+            marker=dict(color=list(top10.color), line=dict(color="white", width=1.5)),
             text=top10.Power,
             textposition="outside",
+            hovertemplate="%{y}: %{x} out of 100<extra></extra>",
         )
     )
+    fig.add_vline(
+        x=50,
+        line_dash="dash",
+        line_color="rgba(255,255,255,0.65)",
+        annotation_text="Average team",
+        annotation_position="top",
+        annotation_font_color="white",
+    )
     fig.update_layout(
-        height=330,
-        margin=dict(l=0, r=30, t=10, b=0),
+        height=390,
+        margin=dict(l=0, r=30, t=30, b=40),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font_color="white",
-        xaxis=dict(range=[0, max(100, top10.Power.max() + 10)], showgrid=False),
+        xaxis=dict(
+            range=[0, max(100, top10.Power.max() + 10)],
+            showgrid=False,
+            title="Power Score (higher = stronger)",
+        ),
         yaxis=dict(showgrid=False),
     )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    note = (
-        "Power score blends win %, point margin and offensive EPA (open nflverse data)."
-        if rank.attrs.get("has_epa")
-        else "Power score blends win % and point margin (EPA data not available right now)."
-    )
-    st.caption(note)
+    with st.expander("ℹ️ What is Power Score?"):
+        ingredients = (
+            "- **Wins**: how often the team wins\n"
+            "- **Margin**: how many more points per game it scores than its opponents\n"
+        )
+        if rank.attrs.get("has_epa"):
+            ingredients += (
+                "- **Offensive efficiency**: how much the offense gains on each play "
+                "compared with an average team\n"
+            )
+        st.markdown(
+            "Power Score is a 0 to 100 rating of how strong a team looks this season. "
+            "**50 is an average team**, and higher is better. It blends:\n\n"
+            + ingredients
+            + "\nIt shows how teams have played so far, so it moves as new games finish. "
+            "It's a fun guide, not a guarantee of who wins."
+        )
+
+
+def short_wx(g, parts=2):
+    """Short weather text for compact cards (empty if no forecast yet)."""
+    w = game_weather(g)
+    if not w or w.startswith("Forecast opens"):
+        return ""
+    return " · ".join(w.split(" · ")[:parts])
+
+
+def projection(rank, away, home):
+    """Fun projection: Power Score gap plus a small home-field bonus.
+    Returns (projected winner abbreviation, win probability 0-1)."""
+    power = dict(zip(rank.abbr, rank.Power)) if not rank.empty else {}
+    diff = power.get(home, 50.0) - power.get(away, 50.0) + 5.0  # ~2 pts home field
+    points = diff * 0.4  # 15 Power ~ 6 points of spread
+    p_home = 0.5 * (1 + math.erf(points / (13.5 * math.sqrt(2))))
+    return (home, p_home) if p_home >= 0.5 else (away, 1 - p_home)
 
 
 def game_card(g):
+    """One-row scoreboard: away team | status | home team, plus a footer line."""
     if g.state == "in":
-        status = f'<span class="live-dot">● LIVE</span> · Q{g.period} {g.clock}'
+        chip, chip_cls = "LIVE", "live"
+        if "half" in str(g.detail).lower():
+            mid = "Halftime"
+        else:
+            mid = (f"Q{g.period}" if g.period <= 4 else "OT") + f" · {g.clock}"
     elif g.state == "post":
-        status = "Final"
+        chip, chip_cls, mid = "FINAL", "final", g.date.strftime("%a")
     else:
-        status = g.date.strftime("%a %b %d, %I:%M %p")
-    wx = game_weather(g)
+        chip, chip_cls = "UP NEXT", "soon"
+        mid = g.date.strftime("%a %I:%M %p").replace(" 0", " ")
+
+    show = g.state != "pre"
+    a_sc = g.away_score if show else "–"
+    h_sc = g.home_score if show else "–"
+    a_dim = " dim" if g.state == "post" and g.away_score < g.home_score else ""
+    h_dim = " dim" if g.state == "post" and g.home_score < g.away_score else ""
+    lead = g.home_color if g.home_score >= g.away_score else g.away_color
+    wx = short_wx(g, 3)
+    foot = f"📍 {g.venue_name}" + (f" · {wx}" if wx else "")
     st.markdown(
         f"""
-<div class="game" style="border-left-color:{g.home_color if g.home_score >= g.away_score else g.away_color}">
-  <div class="status">{status}</div>
-  <div class="row"><span>{g.away_name} <small style="opacity:.7">· AWAY</small></span><b>{g.away_score if g.state != 'pre' else ''}</b></div>
-  <div class="row"><span>{g.home_name} <small style="opacity:.7">· HOME</small></span><b>{g.home_score if g.state != 'pre' else ''}</b></div>
-  <div class="status" style="margin-top:6px">📍 {g.venue_name}{(' · ' + wx) if wx else ''}</div>
+<div class="sb" style="--c:{lead}">
+  <div class="tm"><img src="{g.away_logo}"/><div><div class="ab">{g.away}</div><div class="ha">AWAY</div></div><div class="sc{a_dim}">{a_sc}</div></div>
+  <div class="mid"><div class="chip {chip_cls}">{chip}</div><div class="mt">{mid}</div></div>
+  <div class="tm h"><div class="sc{h_dim}">{h_sc}</div><div style="text-align:right"><div class="ab">{g.home}</div><div class="ha">HOME</div></div><img src="{g.home_logo}"/></div>
+  <div class="foot">{foot}</div>
 </div>""",
         unsafe_allow_html=True,
     )
@@ -542,11 +639,42 @@ def game_card(g):
 def render_boxscore(event_id):
     data = fetch_short(f"{ESPN}/summary", (("event", event_id),))
     if not data:
-        st.caption("Box score not available yet.")
+        st.caption("Player stats aren't available yet.")
         return
     box = data.get("boxscore", {})
+
+    # Quick look: each team's top passer and top rusher
+    blocks = []
     for team in box.get("players", []):
-        st.markdown(f"**{team['team']['displayName']}**")
+        tinfo = team.get("team", {})
+        label = tinfo.get("abbreviation") or tinfo.get("displayName", "")
+        lines = []
+        for grp in team.get("statistics", []):
+            if grp.get("name") not in ("passing", "rushing"):
+                continue
+            athletes = grp.get("athletes", [])
+            if not athletes:
+                continue
+            a = athletes[0]
+            d = dict(zip(grp.get("labels", []), a.get("stats", [])))
+            nm = a["athlete"]["displayName"]
+            if grp["name"] == "passing":
+                lines.append(
+                    f"🎯 Passing: {nm}, {d.get('C/ATT', '-')} completions, "
+                    f"{d.get('YDS', '-')} yds, {d.get('TD', '-')} TD, {d.get('INT', '-')} INT"
+                )
+            else:
+                lines.append(
+                    f"🏃 Rushing: {nm}, {d.get('CAR', '-')} carries, "
+                    f"{d.get('YDS', '-')} yds, {d.get('TD', '-')} TD"
+                )
+        if lines:
+            blocks.append(f"**{label}**  \n" + "  \n".join(lines))
+    if blocks:
+        st.markdown("\n\n".join(blocks))
+
+    # Full tables
+    for team in box.get("players", []):
         for grp in team.get("statistics", []):
             if grp.get("name") in ("passing", "rushing"):
                 labels = grp.get("labels", [])
@@ -556,12 +684,18 @@ def render_boxscore(event_id):
                     if len(stats) == len(labels):
                         rows.append([a["athlete"]["displayName"], *stats])
                 if rows:
-                    st.caption(grp["name"].title())
+                    st.caption(f"{team['team']['displayName']} · {grp['name'].title()}")
                     st.dataframe(
                         pd.DataFrame(rows, columns=["Player", *labels]),
                         hide_index=True,
                         use_container_width=True,
                     )
+    st.caption(
+        "C/ATT = completed / attempted passes · YDS = yards · AVG = yards per play · "
+        "TD = touchdowns · INT = interceptions · SACKS = times sacked (and yards lost) · "
+        "QBR, RTG = passer ratings · CAR = carries · LONG = longest play"
+    )
+
     teams = box.get("teams", [])
     if len(teams) == 2:
         stat_rows = {}
@@ -588,24 +722,37 @@ def live_dashboard():
         rank = power_rankings(games, directory)
         champion_banner(rank)
 
-    st.subheader("Game Day")
-    week_data = fetch_short(f"{ESPN}/scoreboard")
-    wk = parse_events(week_data)
+    st.markdown(
+        '<div class="sec-title">🏈 This Week&#39;s Games</div>', unsafe_allow_html=True
+    )
+    wk = parse_events(fetch_short(f"{ESPN}/scoreboard"))
     if wk.empty:
         st.info("No games on the current scoreboard.")
     else:
-        order = {"in": 0, "pre": 1, "post": 2}
-        wk = wk.assign(_o=wk.state.map(order)).sort_values(["_o", "date"])
         n_live = int((wk.state == "in").sum())
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Live now", n_live)
-        c2.metric("Final", int((wk.state == "post").sum()))
-        c3.metric("Upcoming", int((wk.state == "pre").sum()))
-        for _, g in wk.iterrows():
-            game_card(g)
-            if g.state in ("in", "post"):
-                with st.expander("Passing, rushing & team stats"):
-                    render_boxscore(g.id)
+        n_done = int((wk.state == "post").sum())
+        n_soon = int((wk.state == "pre").sum())
+        st.caption(
+            f"🔴 {n_live} playing now · ✅ {n_done} finished · 🕐 {n_soon} not started yet"
+        )
+        groups = [
+            ("in", "🔴 Playing now", "Live scores. Tap Player stats to see passing and rushing."),
+            ("pre", "🕐 Coming up", "Kickoff times are Central."),
+            ("post", "✅ Finished", "Final scores."),
+        ]
+        for state, title, sub in groups:
+            part = wk[wk.state == state].sort_values("date")
+            if part.empty:
+                continue
+            st.markdown(
+                f'<div class="sec-title">{title}</div><div class="sec-sub">{sub}</div>',
+                unsafe_allow_html=True,
+            )
+            for _, g in part.iterrows():
+                game_card(g)
+                if state in ("in", "post"):
+                    with st.expander("📊 Player stats"):
+                        render_boxscore(g.id)
     st.caption(
         f"Auto-refreshes every {REFRESH_SECONDS}s · last updated "
         f"{datetime.now(TZ).strftime('%I:%M:%S %p')}"
@@ -710,34 +857,90 @@ def team_section(games, directory, rank):
             st.dataframe(t_inj, hide_index=True, use_container_width=True)
 
 
-def schedule_section(games):
+def schedule_section(games, rank):
     up = games[games.state == "pre"].sort_values("date")
     if up.empty:
         st.info("No upcoming games found.")
         return
-    st.caption(f"{len(up)} upcoming games (times in Central).")
-    for wk, grp in up.groupby("week", sort=True):
-        with st.expander(f"Week {int(wk)}" if pd.notna(wk) else "Other", expanded=(wk == up.week.min())):
-            table = pd.DataFrame(
-                {
-                    "When": grp.date.dt.strftime("%a %b %d · %I:%M %p"),
-                    "Away": grp.away,
-                    "Home": grp.home,
-                    "Weather": [game_weather(g) for _, g in grp.iterrows()],
-                }
+    weeks = sorted(int(w) for w in up.week.dropna().unique())
+    wk = st.selectbox("Pick a week", weeks, format_func=lambda w: f"Week {w}")
+    part = up[up.week == wk]
+    st.caption(
+        f"{len(part)} games · times in Central · 🔮 = projected winner and chance "
+        "(a fun estimate from Power Scores plus home-field advantage, not a betting tip)"
+    )
+    for day, grp in part.groupby(part.date.dt.strftime("%A, %b %d"), sort=False):
+        st.markdown(f'<div class="sec-title">{day}</div>', unsafe_allow_html=True)
+        html = '<div class="sch-grid">'
+        for _, g in grp.iterrows():
+            wx = short_wx(g, 2)
+            who, p = projection(rank, g.away, g.home)
+            html += (
+                f'<div class="sch"><div class="when">{g.date.strftime("%I:%M %p").lstrip("0")}</div>'
+                f'<div class="mu"><img src="{g.away_logo}"/><b>{g.away}</b><span>@</span>'
+                f'<b>{g.home}</b><img src="{g.home_logo}"/></div>'
+                f'<div class="wx">{wx or "&nbsp;"}</div>'
+                f'<div class="pick">🔮 {who} {p * 100:.0f}%</div></div>'
             )
-            st.dataframe(table, hide_index=True, use_container_width=True)
+        html += "</div>"
+        st.markdown(html, unsafe_allow_html=True)
 
 
 def rankings_section(rank):
     if rank.empty:
         st.info("No data yet.")
         return
-    t = rank[["name", "W", "L", "T", "PF", "PA", "Diff", "Power"]].copy()
-    t.insert(0, "#", range(1, len(t) + 1))
-    t.columns = ["#", "Team", "W", "L", "T", "PF/G", "PA/G", "Margin", "Power"]
-    t[["PF/G", "PA/G", "Margin"]] = t[["PF/G", "PA/G", "Margin"]].round(1)
-    st.dataframe(t, hide_index=True, use_container_width=True, height=600)
+    with st.expander("ℹ️ What do these numbers mean?"):
+        st.markdown(
+            "- **Record**: wins-losses (and ties, if any)\n"
+            "- **Scores**: average points the team scores per game\n"
+            "- **Allows**: average points opponents score against them per game\n"
+            "- **Margin**: Scores minus Allows. +7 means the team beats opponents by about "
+            "7 points per game on average\n"
+            "- **Power**: an overall strength score from 0 to 100 that blends wins, margin, "
+            "and offensive efficiency. 50 is an average team; higher is better"
+        )
+    medals = {0: "🥇", 1: "🥈", 2: "🥉"}
+    t = pd.DataFrame(
+        {
+            "Rank": [medals.get(i, str(i + 1)) for i in range(len(rank))],
+            "Team": rank["name"],
+            "Record": [
+                f"{int(w)}-{int(l)}" + (f"-{int(ti)}" if ti else "")
+                for w, l, ti in zip(rank.W, rank.L, rank["T"])
+            ],
+            "Scores": rank.PF.round(1),
+            "Allows": rank.PA.round(1),
+            "Margin": rank.Diff.round(1),
+            "Power": rank.Power,
+        }
+    )
+    st.dataframe(
+        t,
+        hide_index=True,
+        use_container_width=True,
+        height=600,
+        column_config={
+            "Rank": st.column_config.TextColumn("Rank", width="small"),
+            "Record": st.column_config.TextColumn("Record", help="Wins-losses (ties if any)"),
+            "Scores": st.column_config.NumberColumn(
+                "Scores", help="Average points scored per game", format="%.1f"
+            ),
+            "Allows": st.column_config.NumberColumn(
+                "Allows", help="Average points allowed per game", format="%.1f"
+            ),
+            "Margin": st.column_config.NumberColumn(
+                "Margin", help="Scores minus Allows, per game", format="%+.1f"
+            ),
+            "Power": st.column_config.ProgressColumn(
+                "Power",
+                help="Overall strength, 0-100. 50 is average.",
+                min_value=0,
+                max_value=100,
+                format="%.0f",
+            ),
+        },
+    )
 
 
 # ----------------------------------------------------------------------------
@@ -760,7 +963,7 @@ if not all_games.empty:
     with tab2:
         team_section(all_games, directory, rank_df)
     with tab3:
-        schedule_section(all_games)
+        schedule_section(all_games, rank_df)
 else:
     st.error(
         "Rankings, team pages and the schedule need the ESPN season feed, which didn't "

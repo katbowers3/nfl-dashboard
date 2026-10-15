@@ -20,6 +20,7 @@ public APIs and their terms of use restrict scraping/redistribution (PFF is payw
 
 import json
 import math
+from html import escape as esc
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -220,6 +221,23 @@ h1, h2, h3 {{ color: #FFFFFF; }}
 .up .pk {{ font-size: .78rem; font-weight: 700; color: #ffd166; }}
 .up .tv {{ font-size: .72rem; opacity: .9; margin-top: 2px; }}
 .up .wx {{ font-size: .68rem; opacity: .7; margin-top: 2px; }}
+.pl-h {{ font-weight: 800; font-size: .95rem; margin: 10px 0 4px 2px; padding-bottom: 3px; border-bottom: 2px solid {RED}; }}
+.pl-list {{ display: flex; flex-direction: column; gap: 4px; margin: 0 0 4px 0; }}
+.pl {{ display: flex; align-items: center; gap: 8px; background: #10264d; border-radius: 10px; padding: 4px 8px; color: white; }}
+.pl .pr {{ width: 22px; text-align: center; font-weight: 800; flex: none; }}
+.pl img, .pl .ph {{ height: 34px; width: 34px; border-radius: 50%; object-fit: cover; background: #0A1F44; flex: none; display: flex; align-items: center; justify-content: center; }}
+.pl .pn {{ flex: 1; min-width: 0; }}
+.pl .pn b {{ font-size: .9rem; }}
+.pl .pn, .pl .ps {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+.pl .ps {{ font-size: .74rem; opacity: .8; }}
+.pl .ps img.tl {{ height: 14px; width: 14px; border-radius: 0; vertical-align: -2px; margin-right: 4px; display: inline; background: none; }}
+.pl .py {{ font-size: 1.15rem; font-weight: 800; text-align: right; flex: none; }}
+.pl .py small {{ font-size: .6rem; opacity: .7; margin-left: 2px; }}
+.stTabs [data-baseweb="tab-list"] {{ gap: 8px; }}
+.stTabs [data-baseweb="tab"] {{ height: 52px; padding: 0 16px; background: #10264d; border-radius: 12px 12px 0 0; }}
+.stTabs [data-baseweb="tab"] * {{ font-size: 1.2rem; font-weight: 800; color: #FFFFFF !important; }}
+.stTabs [aria-selected="true"] {{ background: #1d3f7a; }}
+.stTabs [data-baseweb="tab-highlight"] {{ background-color: {RED} !important; height: 4px; }}
 </style>
 """,
     unsafe_allow_html=True,
@@ -522,7 +540,8 @@ def power_rankings(games, directory):
 # ----------------------------------------------------------------------------
 # UI pieces
 # ----------------------------------------------------------------------------
-def champion_banner(rank):
+def champion_card(rank):
+    """Title + best-team banner (left side of the top section)."""
     if rank.empty:
         st.info("Power rankings appear once games have been played this season.")
         return
@@ -547,6 +566,11 @@ def champion_banner(rank):
         unsafe_allow_html=True,
     )
 
+
+def power_chart(rank):
+    """Top 10 Power Score chart with plain-English explanation."""
+    if rank.empty:
+        return
     st.markdown(
         '<div class="sec-title">📊 Top 10 teams</div>'
         '<div class="sec-sub">Longer bar = stronger team. '
@@ -782,7 +806,14 @@ def live_dashboard():
     else:
         directory = team_directory(games)
         rank = power_rankings(games, directory)
-        champion_banner(rank)
+
+    wk = parse_events(fetch_short(f"{ESPN}/scoreboard"))
+    left, right = st.columns(2)
+    with left:
+        champion_card(rank)
+        power_chart(rank)
+    with right:
+        spotlight_panel(games, wk)
 
     st.markdown(
         '<div class="sec-title">🏈 This Week&#39;s Games</div>', unsafe_allow_html=True
@@ -998,6 +1029,150 @@ def schedule_section(games, rank):
         schedule_by_week(games, rank)
 
 
+def _num(v):
+    try:
+        return float(str(v).replace(",", ""))
+    except Exception:
+        return 0.0
+
+
+def collect_leaders(games):
+    """Every player's passing / rushing / receiving line from the given games' box scores."""
+    rows = {"passing": [], "rushing": [], "receiving": []}
+    for _, g in games.iterrows():
+        # Live games refresh every 30s; finished games never change, so cache them longer.
+        fetcher = fetch_short if g.state == "in" else fetch_long
+        data = fetcher(f"{ESPN}/summary", (("event", g.id),))
+        if not data:
+            continue
+        for team in data.get("boxscore", {}).get("players", []):
+            tinfo = team.get("team", {})
+            abbr = tinfo.get("abbreviation") or tinfo.get("displayName", "")
+            for grp in team.get("statistics", []):
+                kind = grp.get("name")
+                if kind not in rows:
+                    continue
+                labels = grp.get("labels", [])
+                for a in grp.get("athletes", []):
+                    stats = a.get("stats", [])
+                    if len(stats) != len(labels):
+                        continue
+                    d = dict(zip(labels, stats))
+                    ath = a.get("athlete", {})
+                    rows[kind].append(
+                        dict(
+                            name=ath.get("displayName", "?"),
+                            team=abbr,
+                            live=(g.state == "in"),
+                            d=d,
+                            img=(ath.get("headshot") or {}).get("href", ""),
+                            yds=_num(d.get("YDS")),
+                        )
+                    )
+    return rows
+
+
+def spotlight_html(players, kind):
+    medals = ["🥇", "🥈", "🥉", "4", "5"]
+    out = '<div class="pl-list">'
+    for i, p in enumerate(players):
+        d = p["d"]
+        if kind == "passing":
+            line = f"{d.get('C/ATT', '-')} · {d.get('TD', '0')} TD · {d.get('INT', '0')} INT"
+        elif kind == "rushing":
+            line = f"{d.get('CAR', '-')} carries · {d.get('TD', '0')} TD"
+        else:
+            line = f"{d.get('REC', '-')} catches · {d.get('TD', '0')} TD"
+        live = ' <span class="chip live">LIVE</span>' if p["live"] else ""
+        lg = (
+            f'<img class="tl" src="{esc(p["logo"])}"/>'
+            if str(p.get("logo", "")).startswith("http")
+            else ""
+        )
+        img = (
+            f'<img src="{esc(p["img"])}"/>'
+            if str(p["img"]).startswith("http")
+            else '<div class="ph">🏈</div>'
+        )
+        out += (
+            f'<div class="pl"><div class="pr">{medals[i]}</div>{img}'
+            f'<div class="pn"><b>{esc(p["name"])}</b>{live}'
+            f'<div class="ps">{lg}{esc(p["team"])} · {line}</div></div>'
+            f'<div class="py">{int(p["yds"])}<small>yds</small></div></div>'
+        )
+    return out + "</div>"
+
+
+def spotlight_panel(games, wk):
+    """Player spotlight: live + this week's games, topped up from recent finished weeks
+    so there are always players to show once the season has games."""
+    st.markdown('<div class="sec-title">⭐ Player spotlight</div>', unsafe_allow_html=True)
+    rows = {"passing": [], "rushing": [], "receiving": []}
+    sources = []
+
+    def add(frame, label, fresh):
+        got = collect_leaders(frame)
+        for k in rows:
+            for p in got[k]:
+                p["fresh"] = fresh  # this week's players are shown before older ones
+            rows[k].extend(got[k])
+        sources.append(label)
+
+    def enough():
+        return all(len(rows[k]) >= 5 for k in rows)
+
+    this_week = wk[wk.state.isin(["in", "post"])] if not wk.empty else wk
+    if not this_week.empty:
+        live = bool((this_week.state == "in").any())
+        add(this_week, "live and finished games this week" if live else "this week's finished games", True)
+
+    if not enough() and not games.empty:
+        cur = int(wk.week.max()) if (not wk.empty and wk.week.notna().any()) else 99
+        past = games[(games.state == "post") & (games.season_type == 2) & (games.week < cur)]
+        for w in sorted(past.week.dropna().unique(), reverse=True)[:3]:
+            if enough():
+                break
+            add(past[past.week == w], f"Week {int(w)}", False)
+
+    logos = {}
+    for fr in (games, wk):
+        if fr is not None and not fr.empty:
+            for _, g in fr.iterrows():
+                logos[g.away] = g.away_logo
+                logos[g.home] = g.home_logo
+
+    if not any(rows.values()):
+        st.info("Player stats will show up here once the first games of the season are played.")
+        return
+
+    st.markdown(
+        '<div class="sec-sub">Top 3 by yards. A red LIVE tag means that player&#39;s '
+        "game is happening right now.</div>",
+        unsafe_allow_html=True,
+    )
+    for kind, title in (
+        ("passing", "🎯 Passing"),
+        ("rushing", "🏃 Rushing"),
+        ("receiving", "🙌 Receiving"),
+    ):
+        seen, top = set(), []
+        for p in sorted(rows[kind], key=lambda p: (p["fresh"], p["yds"]), reverse=True):
+            if p["name"] in seen:
+                continue
+            seen.add(p["name"])
+            p["logo"] = logos.get(p["team"], "")
+            top.append(p)
+            if len(top) == 3:
+                break
+        if top:
+            st.markdown(
+                f'<div class="pl-h">{title}</div>'
+                + spotlight_html(top, kind),
+                unsafe_allow_html=True,
+            )
+    st.caption("From: " + " + ".join(sources) + ". Updates every 30 seconds.")
+
+
 def rankings_section(rank):
     if rank.empty:
         st.info("No data yet.")
@@ -1069,6 +1244,10 @@ all_games = load_season_games()
 if not all_games.empty:
     directory = team_directory(all_games)
     rank_df = power_rankings(all_games, directory)
+    st.markdown(
+        '<div class="sec-title">👇 Tap a tab for more</div>',
+        unsafe_allow_html=True,
+    )
     tab1, tab2, tab3 = st.tabs(["📊 Rankings", "🏟️ Teams", "📅 Schedule"])
     with tab1:
         rankings_section(rank_df)

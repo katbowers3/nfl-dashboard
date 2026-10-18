@@ -187,6 +187,7 @@ h1, h2, h3 {{ color: #FFFFFF; }}
 .card .l {{ font-size: .7rem; opacity: .8; text-transform: uppercase; letter-spacing: .4px; }}
 .sec-title {{ font-size: 1.1rem; font-weight: 800; margin: 16px 0 2px 0; color: #FFFFFF; }}
 .sec-sub {{ font-size: .8rem; opacity: .7; margin-bottom: 6px; }}
+.disc {{ background: #10264d; border: 1px solid #ffd166; border-radius: 12px; padding: 8px 12px; margin: 4px 0 12px 0; font-size: .85rem; color: white; }}
 .sb {{ display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px; background: #10264d; border-radius: 14px; padding: 10px 12px; margin: 8px 0; color: white; border-top: 4px solid var(--c, {RED}); }}
 .sb .tm {{ display: flex; align-items: center; gap: 8px; min-width: 0; }}
 .sb .tm img {{ height: 34px; width: 34px; object-fit: contain; flex: none; }}
@@ -640,7 +641,7 @@ def short_wx(g, parts=2):
 
 
 def projection(rank, away, home):
-    """Fun projection: Power Score gap plus a small home-field bonus.
+    """Fun hunch (entertainment only): Power Score gap plus a small home-field bonus.
     Returns (projected winner abbreviation, win probability 0-1)."""
     power = dict(zip(rank.abbr, rank.Power)) if not rank.empty else {}
     diff = power.get(home, 50.0) - power.get(away, 50.0) + 5.0  # ~2 pts home field
@@ -700,7 +701,7 @@ def upcoming_section(part, rank):
                 f'<div class="up"><div class="uw">{g.date.strftime("%a %I:%M %p").replace(" 0", " ")}</div>'
                 f'<div class="um"><img src="{g.away_logo}"/><b>{g.away}</b>{rank_tag(g.away)}'
                 f'<span>@</span><b>{g.home}</b>{rank_tag(g.home)}<img src="{g.home_logo}"/></div>'
-                f'<div class="pk">🔮 {who} wins · {p * 100:.0f}%</div>'
+                f'<div class="pk">🔮 Fun hunch: {who}</div>'
                 f'<div class="tv">📺 {tv}</div>'
                 + (f'<div class="wx">{wx}</div>' if wx else "")
                 + "</div>"
@@ -708,8 +709,8 @@ def upcoming_section(part, rank):
         return html + "</div>"
 
     st.caption(
-        "🔮 projected winner and chance (a fun estimate) · #n = Power Rank, 1 is the strongest "
-        "team · 📺 where to watch · away @ home"
+        "🔮 Fun hunch = just for fun, not a prediction or betting tip · #n = Power Rank, "
+        "1 is the strongest team · 📺 where to watch · away @ home"
     )
     day_of = part.date.dt.strftime("%a %b %d")
     days = list(dict.fromkeys(day_of))
@@ -962,8 +963,8 @@ def schedule_by_week(games, rank):
     wk = st.selectbox("Pick a week", weeks, format_func=lambda w: f"Week {w}")
     part = up[up.week == wk]
     st.caption(
-        f"{len(part)} games · times in Central · 🔮 = projected winner and chance "
-        "(a fun estimate from Power Scores plus home-field advantage, not a betting tip)"
+        f"{len(part)} games · times in Central · 🔮 Fun hunch = just for fun, based on "
+        "Power Scores. Not a prediction or a betting tip"
     )
     for day, grp in part.groupby(part.date.dt.strftime("%A, %b %d"), sort=False):
         st.markdown(f'<div class="sec-title">{day}</div>', unsafe_allow_html=True)
@@ -976,7 +977,7 @@ def schedule_by_week(games, rank):
                 f'<div class="mu"><img src="{g.away_logo}"/><b>{g.away}</b><span>@</span>'
                 f'<b>{g.home}</b><img src="{g.home_logo}"/></div>'
                 f'<div class="wx">{wx or "&nbsp;"}</div>'
-                f'<div class="pick">🔮 {who} {p * 100:.0f}%</div></div>'
+                f'<div class="pick">🔮 Fun hunch: {who}</div></div>'
             )
         html += "</div>"
         st.markdown(html, unsafe_allow_html=True)
@@ -1000,21 +1001,21 @@ def season_table(games, rank):
             note = f"Live now: {g.away} {g.away_score}, {g.home} {g.home_score}"
         else:
             who, p = projection(rank, g.away, g.home)
-            note = f"🔮 {who} {p * 100:.0f}%"
+            note = f"🔮 Fun hunch: {who}"
         rows.append(
             {
                 "Week": int(g.week) if pd.notna(g.week) else None,
                 "When": g.date.strftime("%a %b %d · %I:%M %p").replace(" 0", " "),
                 "Away": g.away,
                 "Home": g.home,
-                "Projected winner / Result": note,
+                "Fun hunch / Result": note,
                 "TV": g.tv or "TBA",
             }
         )
     last = int(reg.week.max()) if reg.week.notna().any() else "?"
     st.caption(
         f"{len(rows)} regular-season games through Week {last} (playoffs not included). "
-        "Times are Central. 🔮 = projected winner (a fun estimate). Scroll inside the table."
+        "Times are Central. 🔮 Fun hunch = just for fun, not a prediction or betting tip. Scroll inside the table."
     )
     st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True, height=460)
 
@@ -1238,6 +1239,14 @@ inject_pwa_tags()
 
 st.markdown('<div class="app-title">🏈 KB&#39;s Couch Coach</div>', unsafe_allow_html=True)
 
+st.markdown(
+    '<div class="disc">🎉 <b>Just for fun.</b> This is an unofficial fan project for friends and '
+    "family. It is not affiliated with or endorsed by the NFL or any team, and it is not "
+    "betting, gambling or advice of any kind. Rankings and &ldquo;fun hunches&rdquo; are "
+    "simple, for-entertainment-only guesses.</div>",
+    unsafe_allow_html=True,
+)
+
 live_dashboard()
 
 all_games = load_season_games()
@@ -1263,6 +1272,11 @@ else:
 
 st.divider()
 st.caption(
-    "Data: ESPN public site API and nflverse open data. Unofficial fan project; "
-    "not affiliated with the NFL or its teams."
+    "Unofficial fan project, made just for fun and not for profit. Not affiliated with, "
+    "endorsed or sponsored by the NFL or any team. NFL, team names, logos and player "
+    "images are trademarks or property of their respective owners and are shown only to "
+    "identify teams and players. Scores and stats from ESPN's public data feed; EPA data from "
+    "nflverse (open data); weather from Open-Meteo.com (CC BY 4.0). \"Fun hunch\" and Power "
+    "Scores are for entertainment only: not predictions, odds, betting tips or advice. "
+    "Please do not use this site for gambling."
 )

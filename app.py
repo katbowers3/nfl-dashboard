@@ -642,7 +642,7 @@ def short_wx(g, parts=2):
 
 def projection(rank, away, home):
     """Fun hunch (entertainment only): Power Score gap plus a small home-field bonus.
-    Returns (projected winner abbreviation, win probability 0-1)."""
+    Returns (fun-hunch team abbreviation, strength gap 0-1)."""
     power = dict(zip(rank.abbr, rank.Power)) if not rank.empty else {}
     diff = power.get(home, 50.0) - power.get(away, 50.0) + 5.0  # ~2 pts home field
     points = diff * 0.4  # 15 Power ~ 6 points of spread
@@ -685,7 +685,7 @@ def game_card(g):
 
 
 def upcoming_section(part, rank):
-    """Compact 'Coming up' blocks: kickoff, matchup with Power Rank, projected winner, TV."""
+    """Compact 'Coming up' blocks: kickoff, matchup with Power Rank, fun hunch, TV."""
     pos = {a: i + 1 for i, a in enumerate(rank.abbr)} if not rank.empty else {}
 
     def rank_tag(abbr):
@@ -709,7 +709,7 @@ def upcoming_section(part, rank):
         return html + "</div>"
 
     st.caption(
-        "🔮 Fun hunch = just for fun, not a prediction or betting tip · #n = Power Rank, "
+        "🔮 Fun hunch = just for fun, not a betting tip · #n = Power Rank, "
         "1 is the strongest team · 📺 where to watch · away @ home"
     )
     day_of = part.date.dt.strftime("%a %b %d")
@@ -964,7 +964,7 @@ def schedule_by_week(games, rank):
     part = up[up.week == wk]
     st.caption(
         f"{len(part)} games · times in Central · 🔮 Fun hunch = just for fun, based on "
-        "Power Scores. Not a prediction or a betting tip"
+        "Power Scores. Not a betting tip"
     )
     for day, grp in part.groupby(part.date.dt.strftime("%A, %b %d"), sort=False):
         st.markdown(f'<div class="sec-title">{day}</div>', unsafe_allow_html=True)
@@ -1015,7 +1015,7 @@ def season_table(games, rank):
     last = int(reg.week.max()) if reg.week.notna().any() else "?"
     st.caption(
         f"{len(rows)} regular-season games through Week {last} (playoffs not included). "
-        "Times are Central. 🔮 Fun hunch = just for fun, not a prediction or betting tip. Scroll inside the table."
+        "Times are Central. 🔮 Fun hunch = just for fun, not a betting tip. Scroll inside the table."
     )
     st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True, height=460)
 
@@ -1174,6 +1174,100 @@ def spotlight_panel(games, wk):
     st.caption("From: " + " + ".join(sources) + ". Updates every 30 seconds.")
 
 
+DIVISIONS = {
+    "AFC": {
+        "East": ["BUF", "MIA", "NE", "NYJ"],
+        "North": ["BAL", "CIN", "CLE", "PIT"],
+        "South": ["HOU", "IND", "JAX", "TEN"],
+        "West": ["DEN", "KC", "LV", "LAC"],
+    },
+    "NFC": {
+        "East": ["DAL", "NYG", "PHI", "WSH"],
+        "North": ["CHI", "DET", "GB", "MIN"],
+        "South": ["ATL", "CAR", "NO", "TB"],
+        "West": ["ARI", "LAR", "SF", "SEA"],
+    },
+}
+
+
+def standings_section(rank):
+    """Division standings built from the season results we already load."""
+    if rank.empty:
+        st.info("Standings appear once games have been played this season.")
+        return
+    st.markdown(
+        '<div class="sec-sub">Each division is ranked by wins, then by points margin. '
+        "👑 = leading its division. The real NFL uses more tiebreakers, so this is a "
+        "simple version just for fun.</div>",
+        unsafe_allow_html=True,
+    )
+    by = rank.set_index("abbr")
+    for conf, divs in DIVISIONS.items():
+        st.markdown(f'<div class="sec-title">{conf}</div>', unsafe_allow_html=True)
+        cols = st.columns(2)
+        for n, (div, teams) in enumerate(divs.items()):
+            rows = []
+            for a in teams:
+                if a in by.index:
+                    r = by.loc[a]
+                    rows.append((r.WinPct, r.Diff, r["name"], int(r.W), int(r.L), int(r["T"])))
+                else:
+                    rows.append((0.0, 0.0, a, 0, 0, 0))
+            rows.sort(key=lambda x: (x[0], x[1]), reverse=True)
+            table = pd.DataFrame(
+                {
+                    "Team": [("👑 " if i == 0 and x[3] + x[4] + x[5] > 0 else "") + x[2] for i, x in enumerate(rows)],
+                    "Record": [f"{x[3]}-{x[4]}" + (f"-{x[5]}" if x[5] else "") for x in rows],
+                    "Margin": [round(x[1], 1) for x in rows],
+                }
+            )
+            with cols[n % 2]:
+                st.markdown(f"**{conf} {div}**")
+                st.dataframe(
+                    table,
+                    hide_index=True,
+                    use_container_width=True,
+                    column_config={
+                        "Margin": st.column_config.NumberColumn(
+                            "Margin",
+                            help="Average points scored minus points allowed per game",
+                            format="%+.1f",
+                        )
+                    },
+                )
+
+
+FUN_FACTS = [
+    "The very first Super Bowl was played on January 15, 1967. The Green Bay Packers beat the Kansas City Chiefs 35-10.",
+    "The Green Bay Packers are owned by thousands of fans instead of one billionaire. It is the only community-owned team in the NFL.",
+    "The 1972 Miami Dolphins are the only NFL team to finish a season perfect, winning every game including the Super Bowl.",
+    "The Vince Lombardi Trophy is made of sterling silver and is handmade by Tiffany & Co.",
+    "A football field is 100 yards long, plus a 10-yard end zone at each end. That's 120 yards from back to back.",
+    "Footballs are nicknamed pigskins, but they are really made of cowhide leather.",
+    "The Detroit Lions have hosted a game on Thanksgiving almost every year since 1934.",
+    "Wilson has made the official NFL game ball since 1941.",
+    "Jerry Rice holds the record for the most career receiving yards in NFL history: 22,895.",
+    "The Pro Football Hall of Fame is in Canton, Ohio, where the NFL was founded in 1920.",
+    "A touchdown is worth 6 points. Teams then try for 1 extra point with a kick or 2 points by running or passing it in.",
+    "The Arizona Cardinals started in Chicago in 1898, which makes them one of the oldest pro football teams in the country.",
+    "The NFL regular season is 17 games per team, spread over 18 weeks so every team gets one bye week.",
+]
+
+
+def fun_fact_box():
+    """One fun fact at a time. Starts on a fact that changes daily; the button shows the next."""
+    if "fact_i" not in st.session_state:
+        st.session_state["fact_i"] = datetime.now(TZ).timetuple().tm_yday % len(FUN_FACTS)
+    st.markdown('<div class="sec-title">🧠 Did you know?</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="disc">{esc(FUN_FACTS[st.session_state["fact_i"]])}</div>',
+        unsafe_allow_html=True,
+    )
+    if st.button("🎲 Show me another fun fact"):
+        st.session_state["fact_i"] = (st.session_state["fact_i"] + 1) % len(FUN_FACTS)
+        st.rerun()
+
+
 def rankings_section(rank):
     if rank.empty:
         st.info("No data yet.")
@@ -1257,9 +1351,11 @@ if not all_games.empty:
         '<div class="sec-title">👇 Tap a tab for more</div>',
         unsafe_allow_html=True,
     )
-    tab1, tab2, tab3 = st.tabs(["📊 Rankings", "🏟️ Teams", "📅 Schedule"])
+    tab1, tab4, tab2, tab3 = st.tabs(["📊 Rankings", "🏆 Standings", "🏟️ Teams", "📅 Schedule"])
     with tab1:
         rankings_section(rank_df)
+    with tab4:
+        standings_section(rank_df)
     with tab2:
         team_section(all_games, directory, rank_df)
     with tab3:
@@ -1270,6 +1366,8 @@ else:
         "load. Wait 30 seconds and it retries; if it keeps failing, ESPN may be down."
     )
 
+fun_fact_box()
+
 st.divider()
 st.caption(
     "Unofficial fan project, made just for fun and not for profit. Not affiliated with, "
@@ -1277,6 +1375,6 @@ st.caption(
     "images are trademarks or property of their respective owners and are shown only to "
     "identify teams and players. Scores and stats from ESPN's public data feed; EPA data from "
     "nflverse (open data); weather from Open-Meteo.com (CC BY 4.0). \"Fun hunch\" and Power "
-    "Scores are for entertainment only: not predictions, odds, betting tips or advice. "
+    "Scores are for entertainment only: not odds, betting tips or advice. "
     "Please do not use this site for gambling."
 )

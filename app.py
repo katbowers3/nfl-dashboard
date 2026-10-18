@@ -546,6 +546,15 @@ def power_rankings(games, directory):
 # ----------------------------------------------------------------------------
 # UI pieces
 # ----------------------------------------------------------------------------
+def division_of(abbr):
+    """'AFC East' style label for a team abbreviation ('' if unknown)."""
+    for conf, divs in DIVISIONS.items():
+        for div, teams in divs.items():
+            if abbr in teams:
+                return f"{conf} {div}"
+    return ""
+
+
 def champion_card(rank):
     """Title + best-team banner (left side of the top section)."""
     if rank.empty:
@@ -565,6 +574,7 @@ def champion_card(rank):
   <img src="{top.logo}" alt="logo"/>
   <div class="tname">{top["name"]}</div>
   <div class="sub">Power Score <b>{top.Power}</b> out of 100</div>
+  <div class="sub">{division_of(top.abbr)}</div>
   <div class="sub">Record {int(top.W)}-{int(top.L)}{'-' + str(int(top['T'])) if top['T'] else ''} ·
   scores {top.PF:.1f} and allows {top.PA:.1f} points per game</div>
 </div>
@@ -584,7 +594,10 @@ def power_chart(rank):
         unsafe_allow_html=True,
     )
     top10 = rank.head(10).iloc[::-1]
-    labels = [f"{i + 1}. {n.split()[-1]}" for i, n in zip(top10.index, top10["name"])]
+    labels = [
+        f"{i + 1}. {n.split()[-1]} · {division_of(a)}"
+        for i, n, a in zip(top10.index, top10["name"], top10["abbr"])
+    ]
     fig = go.Figure(
         go.Bar(
             x=top10.Power,
@@ -615,7 +628,7 @@ def power_chart(rank):
             showgrid=False,
             title="Power Score (higher = stronger)",
         ),
-        yaxis=dict(showgrid=False),
+        yaxis=dict(showgrid=False, automargin=True),
     )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     with st.expander("ℹ️ What is Power Score?"):
@@ -820,6 +833,7 @@ def live_dashboard():
         power_chart(rank)
     with right:
         spotlight_panel(games, wk)
+    standings_section(rank)
 
     st.markdown(
         '<div class="sec-title">🏈 This Week&#39;s Games</div>', unsafe_allow_html=True
@@ -1345,8 +1359,6 @@ all_games = load_season_games()
 if not all_games.empty:
     directory = team_directory(all_games)
     rank_df = power_rankings(all_games, directory)
-    standings_section(rank_df)
-
     st.markdown(
         '<div class="sec-title">👇 Tap a tab for more</div>',
         unsafe_allow_html=True,

@@ -187,6 +187,11 @@ h1, h2, h3 {{ color: #FFFFFF; }}
 .card .l {{ font-size: .7rem; opacity: .8; text-transform: uppercase; letter-spacing: .4px; }}
 .sec-title {{ font-size: 1.1rem; font-weight: 800; margin: 16px 0 2px 0; color: #FFFFFF; }}
 .sec-sub {{ font-size: .8rem; opacity: .7; margin-bottom: 6px; }}
+.stand {{ width: 100%; border-collapse: collapse; margin: 0 0 10px 0; font-size: .85rem; background: #10264d; border-radius: 10px; overflow: hidden; }}
+.stand th {{ text-align: right; font-size: .7rem; opacity: .75; padding: 5px 6px; border-bottom: 2px solid {RED}; }}
+.stand th:first-child, .stand td.tn {{ text-align: left; }}
+.stand td {{ text-align: right; padding: 4px 6px; border-top: 1px solid rgba(255,255,255,.08); white-space: nowrap; }}
+.stand td.tn img {{ height: 18px; width: 18px; vertical-align: -4px; margin-right: 6px; }}
 .disc {{ background: #10264d; border: 1px solid #ffd166; border-radius: 12px; padding: 8px 12px; margin: 4px 0 12px 0; font-size: .85rem; color: white; }}
 .sb {{ display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px; background: #10264d; border-radius: 14px; padding: 10px 12px; margin: 8px 0; color: white; border-top: 4px solid var(--c, {RED}); }}
 .sb .tm {{ display: flex; align-items: center; gap: 8px; min-width: 0; }}
@@ -1214,27 +1219,19 @@ def standings_section(rank):
                     else:
                         rows.append((0.0, 0.0, a, 0, 0, 0, ""))
                 rows.sort(key=lambda x: (x[0], x[1]), reverse=True)
-                table = pd.DataFrame(
-                    {
-                        "Logo": [x[6] or None for x in rows],
-                        f"{conf} {div}": [("👑 " if i == 0 and x[3] + x[4] + x[5] > 0 else "") + x[2] for i, x in enumerate(rows)],
-                        "Record": [f"{x[3]}-{x[4]}" + (f"-{x[5]}" if x[5] else "") for x in rows],
-                        "Margin": [round(x[1], 1) for x in rows],
-                    }
-                )
-                st.dataframe(
-                    table,
-                    hide_index=True,
-                    use_container_width=True,
-                    height=212,
-                    column_config={
-                        "Logo": st.column_config.ImageColumn(" ", width="small"),
-                        "Margin": st.column_config.NumberColumn(
-                            "Margin",
-                            help="Average points scored minus points allowed per game",
-                            format="%+.1f",
-                        )
-                    },
+                body = ""
+                for n, x in enumerate(rows):
+                    crown = "👑 " if n == 0 and x[3] + x[4] + x[5] > 0 else ""
+                    logo = f'<img src="{esc(x[6])}"/>' if str(x[6]).startswith("http") else ""
+                    rec = f"{x[3]}-{x[4]}" + (f"-{x[5]}" if x[5] else "")
+                    body += (
+                        f'<tr><td class="tn">{logo}{crown}{esc(x[2])}</td>'
+                        f"<td>{rec}</td><td>{x[1]:+.1f}</td></tr>"
+                    )
+                st.markdown(
+                    f'<table class="stand"><thead><tr><th>{conf} {div}</th><th>Record</th>'
+                    f"<th>Margin</th></tr></thead><tbody>{body}</tbody></table>",
+                    unsafe_allow_html=True,
                 )
 
 

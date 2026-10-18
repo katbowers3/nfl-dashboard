@@ -1191,43 +1191,44 @@ DIVISIONS = {
 
 
 def standings_section(rank):
-    """Division standings built from the season results we already load."""
+    """Division standings for the front page: AFC on the left, NFC on the right."""
     if rank.empty:
-        st.info("Standings appear once games have been played this season.")
         return
     st.markdown(
-        '<div class="sec-sub">Each division is ranked by wins, then by points margin. '
-        "👑 = leading its division. The real NFL uses more tiebreakers, so this is a "
-        "simple version just for fun.</div>",
+        '<div class="sec-title">🏆 Division standings</div>'
+        '<div class="sec-sub">Ranked by wins, then points margin. 👑 = leading its division. '
+        "A simple version just for fun; the real NFL uses more tiebreakers.</div>",
         unsafe_allow_html=True,
     )
     by = rank.set_index("abbr")
-    for conf, divs in DIVISIONS.items():
-        st.markdown(f'<div class="sec-title">{conf}</div>', unsafe_allow_html=True)
-        cols = st.columns(2)
-        for n, (div, teams) in enumerate(divs.items()):
-            rows = []
-            for a in teams:
-                if a in by.index:
-                    r = by.loc[a]
-                    rows.append((r.WinPct, r.Diff, r["name"], int(r.W), int(r.L), int(r["T"])))
-                else:
-                    rows.append((0.0, 0.0, a, 0, 0, 0))
-            rows.sort(key=lambda x: (x[0], x[1]), reverse=True)
-            table = pd.DataFrame(
-                {
-                    "Team": [("👑 " if i == 0 and x[3] + x[4] + x[5] > 0 else "") + x[2] for i, x in enumerate(rows)],
-                    "Record": [f"{x[3]}-{x[4]}" + (f"-{x[5]}" if x[5] else "") for x in rows],
-                    "Margin": [round(x[1], 1) for x in rows],
-                }
-            )
-            with cols[n % 2]:
-                st.markdown(f"**{conf} {div}**")
+    cols = st.columns(2)
+    for col, (conf, divs) in zip(cols, DIVISIONS.items()):
+        with col:
+            st.markdown(f'<div class="pl-h">{conf}</div>', unsafe_allow_html=True)
+            for div, teams in divs.items():
+                rows = []
+                for a in teams:
+                    if a in by.index:
+                        r = by.loc[a]
+                        rows.append((r.WinPct, r.Diff, r["name"].split()[-1], int(r.W), int(r.L), int(r["T"]), r.logo))
+                    else:
+                        rows.append((0.0, 0.0, a, 0, 0, 0, ""))
+                rows.sort(key=lambda x: (x[0], x[1]), reverse=True)
+                table = pd.DataFrame(
+                    {
+                        "Logo": [x[6] or None for x in rows],
+                        f"{conf} {div}": [("👑 " if i == 0 and x[3] + x[4] + x[5] > 0 else "") + x[2] for i, x in enumerate(rows)],
+                        "Record": [f"{x[3]}-{x[4]}" + (f"-{x[5]}" if x[5] else "") for x in rows],
+                        "Margin": [round(x[1], 1) for x in rows],
+                    }
+                )
                 st.dataframe(
                     table,
                     hide_index=True,
                     use_container_width=True,
+                    height=212,
                     column_config={
+                        "Logo": st.column_config.ImageColumn(" ", width="small"),
                         "Margin": st.column_config.NumberColumn(
                             "Margin",
                             help="Average points scored minus points allowed per game",
@@ -1347,15 +1348,15 @@ all_games = load_season_games()
 if not all_games.empty:
     directory = team_directory(all_games)
     rank_df = power_rankings(all_games, directory)
+    standings_section(rank_df)
+
     st.markdown(
         '<div class="sec-title">👇 Tap a tab for more</div>',
         unsafe_allow_html=True,
     )
-    tab1, tab4, tab2, tab3 = st.tabs(["📊 Rankings", "🏆 Standings", "🏟️ Teams", "📅 Schedule"])
+    tab1, tab2, tab3 = st.tabs(["📊 Rankings", "🏟️ Teams", "📅 Schedule"])
     with tab1:
         rankings_section(rank_df)
-    with tab4:
-        standings_section(rank_df)
     with tab2:
         team_section(all_games, directory, rank_df)
     with tab3:
